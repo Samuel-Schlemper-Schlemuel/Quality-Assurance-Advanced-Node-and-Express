@@ -27,12 +27,15 @@ app.use(session({
   secret: process.env.SESSION_SECRET,
   resave: true,
   saveUninitialized: true,
-  cookie: { secure: false },
-  key: 'express.sid'
+  store: store,
+  cookie: { secure: false }
 }))
 
 myDB(async client => {
   const myDataBase = await client.db('database').collection('users');
+
+  auth(app, myDataBase)
+  routes(app, myDataBase)
 
   let currentUsers = 0
 
@@ -60,19 +63,31 @@ myDB(async client => {
   )
 
   io.on('connection', socket => {
-    console.log('A user has connected')
     currentUsers++
-    io.emit('user count', currentUsers)
-    console.log('user ' + socket.request.user.username + ' connected')
+
+    io.emit('user', {
+      username: socket.request.user.username,
+      currentUsers,
+      connected: true
+    });
 
     socket.on('disconnect', () => {
       currentUsers--
-      io.emit('user count', currentUsers)
+      
+      io.emit('user', {
+        username: socket.request.user.username,
+        currentUsers,
+        connected: false
+      });
+    })
+
+    socket.on('chat message', (message) => {
+      io.emit('chat message', {
+        username: socket.request.user.username,
+        message: message
+      })
     })
   })
-
-  auth(app, myDataBase)
-  routes(app, myDataBase)
 
 }).catch(e => {
   app.route('/').get((req, res) => {
